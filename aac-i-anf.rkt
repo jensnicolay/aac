@@ -11,7 +11,7 @@
 ;; machine
 (struct ev (e ρ σ ι κ Ξ) #:transparent)
 (struct ko (ι κ v σ Ξ) #:transparent)
-(struct ctx (λ vs σ) #:transparent)
+(struct ctx (clo vs σ) #:transparent)
 (struct letk (x e ρ) #:transparent)
 (struct letreck (a e ρ) #:transparent)
 (struct haltk () #:transparent)
