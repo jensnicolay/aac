@@ -42,6 +42,7 @@
 (struct letreck (a e ρ) #:transparent)
 (struct haltk () #:transparent)
 (struct clo (λ ρ) #:transparent)
+(struct system (states) #:transparent)
 
 (define (make-step α γ ⊥ ⊔ alloc true? false?)
   (define (env-bind ρ x a)
@@ -84,8 +85,8 @@
           R
           (let ((a (set-first A)))
             (if (set-member? R a)
-                (loop (set-rest A) R)
-                (let* ((v (store-lookup σ a))
+                (loop (set-rest A) R I)
+                (let* ((v (γ (store-lookup σ a)))
                        (T (touches v)))
                   (loop (set-union (set-rest A) T) (set-add R a))))))))
   (define (apply-local-kont ι κ v σ Ξ)
@@ -178,15 +179,25 @@
   (let loop ((visited (set))
              (todo (set s)))
     (if (set-empty? todo)
-        (begin
-          (display "states ") (display (set-count visited)) (display " result ")
-          (for/set ((s visited) #:when (match s ((ko (cons (haltk) _) _ _ _ _) #t) (_ #f)))
-            (match-let (((ko _ _ v _ _) s))
-              v)))
+        (system visited)
         (let ((s (set-first todo)))
           (if (set-member? visited s)
               (loop visited (set-rest todo))
               (loop (set-add visited s) (set-union (step s) (set-rest todo))))))))
+
+(define (state-answer s ⊥)
+  (match s 
+    ((ko (cons (haltk) _) _ v _ _) v)
+    (_ ⊥)))
+
+(define (explore e global step)
+  (run (inject e global) step))
+
+(define (answer sys ⊥ ⊔)
+  (for/fold ((v ⊥)) ((s (system-states sys))) (⊔ (state-answer s ⊥) v)))
+
+(define (do-eval e global step ⊥ ⊔)
+  (answer (explore e global step) ⊥ ⊔))
 ;;
 
 ;; allocators
@@ -207,12 +218,12 @@
 (define (conc-γ v)
   (set v))
 
-(define conc-⊥ 'undefined)
+(define conc-⊥ (gensym '⊥))
 
 (define (conc-⊔ v1 v2)
   (match* (v1 v2)
-    ((conc-⊥ v) v)
-    ((v conc-⊥) v)
+    (((== conc-⊥) v) v)
+    ((v (== conc-⊥)) v)
     ((_ _) (error "concrete join" v1 v2))))
 
 (define (conc-true? v)
@@ -233,7 +244,7 @@
     (not . ,(conc-α not))))
 
 (define (conc-eval e)
-  (run (inject e conc-global) conc-step))
+  (do-eval e conc-global conc-step conc-⊥ conc-⊔))
 ;;
 
 ;; type lattice
@@ -278,7 +289,7 @@
                       (set 'BOOL))))))
 
 (define (type-eval e)
-  (run (inject e type-global) type-step))
+  (do-eval e type-global type-step type-⊥ type-⊔))
 ;;
 
 (define sq '((lambda (x) (* x x)) 8))
@@ -294,12 +305,12 @@
 (define kcfa2 '(let ((_f10 (lambda (_x12) (let ((_f23 (lambda (_x26) (let ((_z7 (lambda (_y18 _y29) _y18))) (_z7 _x12 _x26))))) (let ((_b4 (_f23 #t))) (let ((_c5 (_f23 #f))) (_f23 #t))))))) (let ((_a1 (_f10 #t))) (_f10 #f))))
 (define kcfa3 '(let ((_f10 (lambda (_x12) (let ((_f23 (lambda (_x25) (let ((_f36 (lambda (_x38) (let ((_z9 (lambda (_y110 _y211 _y312) _y110))) (_z9 _x12 _x25 _x38))))) (let ((_c7 (_f36 #t))) (_f36 #f)))))) (let ((_b4 (_f23 #t))) (_f23 #f)))))) (let ((_a1 (_f10 #t))) (_f10 #f))))
 (define loop2 '(letrec ((_lp10 (lambda (_i1 _x2) (let ((_a3 (= 0 _i1))) (if _a3 _x2 (letrec ((_lp24 (lambda (_j5 _f6 _y7) (let ((_b8 (= 0 _j5))) (if _b8 (let ((_p10 (- _i1 1))) (_lp10 _p10 _y7)) (let ((_p11 (- _j5 1))) (let ((_p12 (_f6 _y7))) (_lp24 _p11 _f6 _p12)))))))) (_lp24 10 (lambda (_n9) (+ _n9 _i1)) _x2))))))) (_lp10 10 0)))
-(define mj09 '(letrec ((_lp10 (lambda (_i1 _x2) (let ((_a3 (= 0 _i1))) (if _a3 _x2 (letrec ((_lp24 (lambda (_j5 _f6 _y7) (let ((_b8 (= 0 _j5))) (if _b8 (let ((_p10 (- _i1 1))) (_lp10 _p10 _y7)) (let ((_p11 (- _j5 1))) (let ((_p12 (_f6 _y7))) (_lp24 _p11 _f6 _p12)))))))) (_lp24 10 (lambda (_n9) (+ _n9 _i1)) _x2))))))) (_lp10 10 0)))
+(define mj09 '(let ((_h0 (lambda (_b1) (let ((_g2 (lambda (_z3) _z3))) (let ((_f4 (lambda (_k5) (if _b1 (_k5 1) (_k5 2))))) (let ((_y6 (_f4 (lambda (_x7) _x7)))) (_g2 _y6))))))) (let ((_x8 (_h0 #t))) (let ((_y9 (_h0 #f))) _y9))))
 (define rotate '(letrec ((_rotate0 (lambda (_n1 _x2 _y3 _z4) (let ((_p5 (= _n1 0))) (if _p5 _x2 (let ((_p6 (- _n1 1))) (_rotate0 _p6 _y3 _z4 _x2))))))) (_rotate0 41 5 #t "hallo")))
 (define sat '(let ((_phi5 (lambda (_x16 _x27 _x38 _x49) (let ((__t010 _x16)) (let ((_p23 (if __t010 __t010 (let ((__t111 (not _x27))) (if __t111 __t111 (not _x38)))))) (if _p23 (let ((__t212 (not _x27))) (let ((_p24 (if __t212 __t212 (not _x38)))) (if _p24 (let ((__t313 _x49)) (if __t313 __t313 _x27)) #f))) #f)))))) (let ((_try14 (lambda (_f15) (let ((__t416 (_f15 #t))) (if __t416 __t416 (_f15 #f)))))) (let ((_sat-solve-417 (lambda (_p18) (_try14 (lambda (_n119) (_try14 (lambda (_n220) (_try14 (lambda (_n321) (_try14 (lambda (_n422) (_p18 _n119 _n220 _n321 _n422)))))))))))) (_sat-solve-417 _phi5)))))
 (define hellomemo '(let ((f (lambda (x) x))) (let ((u (f 1))) (f 2))))
 
-(define (test)
+(define (time-test)
   (conc-eval sq)
   (type-eval sq)
   
@@ -332,7 +343,7 @@
    (type-eval mj09)
    (conc-eval rotate)
    (type-eval rotate)
-   ) ; cpu time: 37296 real time: 37283 gc time: 114
+   ) ; cpu time: 40312 real time: 40304 gc time: 195
   
   ;(conc-eval sat)
   ;(type-eval sat)
@@ -341,7 +352,7 @@
   ;(type-eval churchNums)
   )
 
-(define (conc-test)
+(define (conc-time-test)
   (conc-eval sq)
   (conc-eval hellomemo)
   
@@ -358,14 +369,14 @@
    (conc-eval mj09)
    (conc-eval rotate)))
 
-(define (type-test)
+(define (type-time-test)
   (type-eval sq)
   (type-eval hellomemo)
 
   (type-eval loopy1)
   (type-eval loopy2)
   
-  (time
+  ;(time
    (type-eval safeloopy1)
    (type-eval blur)
    (type-eval fac)
@@ -376,4 +387,15 @@
    (type-eval kcfa3)
    (type-eval loop2)
    (type-eval mj09)
-   (type-eval rotate))) ; cpu time: 2031 real time: 2034 gc time: 52
+   (type-eval rotate)
+  ;)
+) ; 
+
+(define (test)
+  (let ((ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 loop2 mj09 rotate)))
+    (for ((en ens))
+      (let ((e (eval en)))
+        (let ((start (current-milliseconds)))
+          (let ((sys (explore e type-global type-step)))
+            (let ((duration (- (current-milliseconds) start)))
+              (printf "~a result ~a states ~a time ~a\n" en (answer sys type-⊥ type-⊔) (set-count (system-states sys)) duration))))))))
