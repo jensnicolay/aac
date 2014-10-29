@@ -85,7 +85,7 @@
           R
           (let ((a (set-first A)))
             (if (set-member? R a)
-                (loop (set-rest A) R I)
+                (loop (set-rest A) R)
                 (let* ((v (γ (store-lookup σ a)))
                        (T (touches v)))
                   (loop (set-union (set-rest A) T) (set-add R a))))))))
