@@ -56,7 +56,7 @@
   (define (eval-atom ae ρ σ)
     (match ae
       ((? symbol? ae) (store-lookup σ (env-lookup ρ ae)))
-      ((and `(lambda ,x ,e0) e) (α (clo e ρ)))
+      (`(lambda ,x ,e0) (α (clo ae ρ)))
       (_ (α ae))))
   (define (stack-frames ι κ Ξ)
     (let loop ((todo (set (cons ι κ))) (result (list->set ι)) (seen (set)))
