@@ -51,7 +51,7 @@
           (lambda (ae ρ σ)
             (match ae
               ((? symbol? ae) (store-lookup σ (env-lookup ρ ae)))
-              ((and `(lambda ,x ,e0) e) (α (clo e ρ)))
+              (`(lambda ,x ,e0) (α (clo ae ρ)))
               (_ (α ae))))))
     (lambda (s)
       (match s
@@ -150,12 +150,12 @@
 (define (conc-γ v)
   (set v))
 
-(define conc-⊥ 'undefined)
+(define conc-⊥ (gensym '⊥))
 
 (define (conc-⊔ v1 v2)
   (match* (v1 v2)
-    ((conc-⊥ v) v)
-    ((v conc-⊥) v)
+    (((== conc-⊥) v) v)
+    ((v (== conc-⊥)) v)
     ((_ _) (error "concrete join" v1 v2))))
 
 (define (conc-true? v)

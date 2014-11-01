@@ -1,10 +1,12 @@
 #lang racket
 
-; memoizing, garbage-collected CESιK*Ξ machine for ANF Scheme (lambda if set! let letrec)
+; memoizing, garbage-collected CESIK*Ξ machine for ANF Scheme (lambda if set! let letrec)
 ; self-adjusting memo with parameterizable procId
 ; gc on application evaluation
 ; guarded pop from Ξ with immediate (local) kont application (the halt state is still handled as an administractive step)
 ; local Ξ
+
+(define LOG (lambda (msg) #f))
 
 ;; general helpers
 ;(define ns (make-base-namespace))
@@ -76,14 +78,14 @@
             (if (or (not κ) (set-member? seen κ))
                 (loop (set-rest todo) seen)
                 (loop (set-union (set-rest todo) (stack-lookup Ξ κ)) (set-add seen κ)))))))
-  (define (update2-m m ctx v)
-    (let* ((id (clo-id (ctx-clo ctx)))
+  (define (memo-cache m τ v)
+    (let* ((id (clo-id (ctx-clo τ)))
            (current (hash-ref m id (hash))))
       (if (hash? current)
-          (let ((vs (ctx-vs ctx)))
+          (let ((vs (ctx-vs τ)))
             (hash-set m id (hash-set current vs (⊔ (hash-ref current vs ⊥) v))))
           m)))
-  (define (update-m m id)
+  (define (memo-poly m id)
     (if (hash-has-key? m id)
         (hash-set m id 'POLY)
         m))
@@ -97,7 +99,7 @@
          (vmr (store-lookup σ a) m (update-r r a ctxs))))
       (`(lambda ,x ,e0)
        (let ((id (proc ae ρ)))
-         (vmr (α (clo ae ρ id)) (update-m m ae) r)))
+         (vmr (α (clo ae ρ id)) (memo-poly m ae) r)))
       (_ (vmr (α ae) m r))))
   (define (touches d)
     (if (set? d)
@@ -173,6 +175,7 @@
                       (let ((cached (hash-ref m id #f)))
                         (if (and (hash? cached) (hash-has-key? cached rvs))
                             (let ((cached-v (hash-ref cached rvs)))
+                              (LOG "MEMO")
                               (set-union states (set (ko ι κ cached-v Γσ Ξ m r))))
                             (let loop ((x x) (vs (reverse rvs)) (ρ* ρ**) (σ* Γσ))
                               (match x
@@ -191,7 +194,7 @@
                      (match-let (((vmr v m r) (eval-atom (car rands) ρ Γσ ctxs m r)))
                        (loop (cdr rands) (cons v rvs) m r)))))))
        ((ko '() κ v σ Ξ m r)
-        (let ((m* (update2-m m κ v)))
+        (let ((m* (memo-cache m κ v)))
           (let loop ((todo (stack-lookup Ξ κ)) (result (set)) (seen (set κ)) (m m*))
             (if (set-empty? todo)
                 result
@@ -200,7 +203,7 @@
                     ((cons '() κ)
                      (if (set-member? seen κ)
                          (loop (set-rest todo) result seen m)
-                         (loop (set-union (set-rest todo) (stack-lookup Ξ κ)) result (set-add seen κ) (update2-m m κ v))))
+                         (loop (set-union (set-rest todo) (stack-lookup Ξ κ)) result (set-add seen κ) (memo-cache m κ v))))
                     ((cons ι κ) (loop (set-rest todo) (set-add result (apply-local-kont ι κ v σ Ξ m r)) seen m))))))))
       ((ko (cons (haltk) _) _ v _ _ _ _)
        (set))
@@ -227,16 +230,16 @@
               (loop visited (set-rest todo))
               (loop (set-add visited s) (set-union (step s) (set-rest todo))))))))
 
-(define (state-answer s ⊥)
-  (match s 
-    ((ko (cons (haltk) _) _ v _ _ _ _) v)
-    (_ ⊥)))
-
 (define (explore e global step)
   (run (inject e global) step))
 
+(define (answer-state? s)
+  (match s
+    ((ko (cons (haltk) _) _ v _ _ _ _) #t)
+    (_ #f)))
+
 (define (answer sys ⊥ ⊔)
-  (for/fold ((v ⊥)) ((s (system-states sys))) (⊔ (state-answer s ⊥) v)))
+  (for/fold ((v ⊥)) ((s (system-states sys))) (⊔ (if (answer-state? s) (ko-v s) ⊥) v)))
 
 (define (do-eval e global step ⊥ ⊔)
   (answer (explore e global step) ⊥ ⊔))
@@ -439,14 +442,19 @@
    (type-eval mj09)
    (type-eval rotate)
   ;)
-) ; cpu time: 1955 real time: 1958 gc time: 37
+)
 
-(define (test)
-  (let ((ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 loop2 mj09 rotate)))
-    (for ((en ens))
-      (let ((e (eval en)))
-        (let ((start (current-milliseconds)))
-          (let ((sys (explore e type-global type-step)))
-            (let ((duration (- (current-milliseconds) start)))
-              (printf "~a result ~a states ~a time ~a\n" en (answer sys type-⊥ type-⊔) (set-count (system-states sys)) duration))))))))
-        
+(define (memo-test)
+  (define ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 loop2 mj09 rotate))
+  
+  (for ((en ens))
+    (let* ((e (eval en))
+           (memo-count 0)
+           (memo-counter
+            (lambda (msg)
+              (set! memo-count (add1 memo-count)))))
+      (set! LOG memo-counter)
+      (let* ((start (current-milliseconds))
+             (sys (explore e type-global type-step))
+             (duration (- (current-milliseconds) start)))
+        (printf "~a result ~a states ~a time ~a memo ~a\n" en (answer sys type-⊥ type-⊔) (set-count (system-states sys)) duration memo-count)))))
