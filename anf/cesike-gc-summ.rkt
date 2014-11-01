@@ -110,7 +110,7 @@
   (define (apply-local-kont ι κ v σ Ξ m)
     (match ι
       ((cons (letk x e ρ) ι)
-       (let* ((a (alloc x))
+       (let* ((a (alloc x κ))
               (ρ* (env-bind ρ x a))
               (σ* (store-alloc σ a v)))
          (ev e ρ* σ* ι κ Ξ m)))
@@ -134,7 +134,7 @@
       ((ev `(let ((,x ,e0)) ,e1) ρ σ ι κ Ξ m)
        (set (ev e0 ρ σ (cons (letk x e1 ρ) ι) κ Ξ m)))
       ((ev `(letrec ((,x ,e0)) ,e1) ρ σ ι κ Ξ m)
-       (let* ((a (alloc x))
+       (let* ((a (alloc x κ))
               (ρ* (env-bind ρ x a))
               (σ* (store-alloc σ a ⊥)))
          (set (ev e0 ρ* σ* (cons (letreck a e1 ρ*) ι) κ Ξ m))))
@@ -155,7 +155,7 @@
                       (let ((τ (ctx w rvs Γσ)))
                         (if (hash-has-key? m τ)
                             (let ((vσs (hash-ref m τ)))
-                              (for/fold ((states states)) ((vσ vσs)) (set-add states (ko ι κ (car vσ) (cdr vσ) Ξ m))))
+                              (for/fold ((states states)) ((vσ vσs)) (LOG "MEMO") (set-add states (ko ι κ (car vσ) (cdr vσ) Ξ m))))
                             (let loop ((x x) (vs (reverse rvs)) (ρ* ρ**) (σ* Γσ))
                               (match x
                                 ('() 
@@ -164,7 +164,7 @@
                                 ((cons x xs)
                                  (if (null? vs)
                                      (set)
-                                     (let ((a (alloc x)))
+                                     (let ((a (alloc x κ)))
                                        (loop xs (cdr vs) (env-bind ρ* x a) (store-alloc σ* a (car vs)))))))))))
                      ((? procedure? w)
                       (set-union states (set (ko ι κ (apply w (reverse rvs)) Γσ Ξ m))))
@@ -195,7 +195,7 @@
       ('()
        (ev e ρ σ `(,(haltk)) #f (hash) (hash)))
       ((cons (cons x v) r)
-       (let ((a (conc-alloc x)))
+       (let ((a (conc-alloc x 0)))
          (loop r (hash-set ρ x a) (hash-set σ a v)))))))
                                       
 (define (run s step)
@@ -226,12 +226,17 @@
 ;; allocators
 (define conc-alloc
   (let ((counter 0))
-    (lambda (x)
+    (lambda (_ __)
       (set! counter (+ counter 1))
       counter)))
 
-(define (mono-alloc x)
+(define (mono-alloc x _)
   x)
+
+(define (poly-alloc x ctx)
+  (cons x (if ctx
+              (clo-λ (ctx-clo ctx))
+              ctx)))
 ;;
 
 ;; conc lattice
@@ -293,7 +298,7 @@
 (define (type-false? v)
   #t)
 
-(define type-step (make-step type-α type-γ type-⊥ type-⊔ mono-alloc type-true? type-false?))
+(define type-step (make-step type-α type-γ type-⊥ type-⊔ poly-alloc type-true? type-false?))
 
 (define type-global
   `((= . ,(type-α (lambda (v1 v2)

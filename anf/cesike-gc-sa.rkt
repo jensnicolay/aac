@@ -1,7 +1,7 @@
 #lang racket
 
 ; memoizing, garbage-collected CESIK*Ξ machine for ANF Scheme (lambda if set! let letrec)
-; self-adjusting memo with λ as procId
+; self-adjusting memo with parameterizable procId
 ; gc on application evaluation
 ; guarded pop from Ξ with immediate (local) kont application (the halt state is still handled as an administractive step)
 ; local Ξ
@@ -9,6 +9,7 @@
 (define LOG (lambda (msg) #f))
 
 ;; general helpers
+;(define ns (make-base-namespace))
 (define (↓ m s)
   (let loop ((s s) (r (hash)))
     (if (set-empty? s)
@@ -45,11 +46,12 @@
 (struct letk (x e ρ) #:transparent)
 (struct letreck (a e ρ) #:transparent)
 (struct haltk () #:transparent)
-(struct clo (λ ρ) #:transparent)
+(struct clo (λ ρ id) #:transparent)
 (struct vmr (v m r) #:transparent)
+(struct env (bindings tag) #:transparent)
 (struct system (states) #:transparent)
 
-(define (make-step α γ ⊥ ⊔ alloc true? false?)
+(define (make-step α γ ⊥ ⊔ alloc true? false? proc)
   (define (env-bind ρ x a)
     (hash-set ρ x a))
   (define (store-alloc σ a v)
@@ -78,7 +80,7 @@
                 (loop (set-rest todo) seen)
                 (loop (set-union (set-rest todo) (stack-lookup Ξ κ)) (set-add seen κ)))))))
   (define (memo-cache m τ v)
-    (let* ((id (clo-λ (ctx-clo τ)))
+    (let* ((id (clo-id (ctx-clo τ)))
            (current (hash-ref m id (hash))))
       (if (hash? current)
           (let ((vs (ctx-vs τ)))
@@ -89,15 +91,16 @@
         (hash-set m id 'POLY)
         m))
   (define (update-r r a ctxs)
-    (let ((ids (list->set (set-map (force ctxs) (lambda (ctx) (clo-λ (ctx-clo ctx)))))))
+    (let ((ids (list->set (set-map (force ctxs) (lambda (ctx) (clo-id (ctx-clo ctx)))))))
       (hash-set r a (set-union (hash-ref r a (set)) ids))))
   (define (eval-atom ae ρ σ ctxs m r)
     (match ae
       ((? symbol? ae)
        (let ((a (env-lookup ρ ae)))
          (vmr (store-lookup σ a) m (update-r r a ctxs))))
-      (`(lambda ,x ,e0) 
-       (vmr (α (clo ae ρ)) (memo-poly m ae) r))
+      (`(lambda ,x ,e0)
+       (let ((id (proc ae ρ)))
+         (vmr (α (clo ae ρ id)) (memo-poly m ae) r)))
       (_ (vmr (α ae) m r))))
   (define (touches d)
     (if (set? d)
@@ -105,7 +108,7 @@
         (match d
           ((ev _ ρ _ ι κ Ξ _ _) (set-union (env-addresses ρ) (apply set-union (set-map (stack-frames ι κ Ξ) touches))))
           ((ko ι κ v _ Ξ _ _) (set-union (apply set-union (set-map (stack-frames ι κ Ξ) touches)) (touches v)))
-          ((clo _ ρ) (env-addresses ρ))
+          ((clo _ ρ _) (env-addresses ρ))
           ((letk _ _ ρ) (env-addresses ρ))
           ((letreck _ _ ρ) (env-addresses ρ))
           (_ (set)))))
@@ -118,12 +121,12 @@
                 (loop (set-rest A) R I)
                 (let* ((v (γ (store-lookup σ a)))
                        (T (touches v))
-                       (I* (for/fold ((r I)) ((d v)) (if (clo? d) (set-add r (clo-λ d)) r))))
+                       (I* (for/fold ((r I)) ((d v)) (if (clo? d) (set-add r (clo-id d)) r))))
                   (loop (set-union (set-rest A) T) (set-add R a) I*)))))))
   (define (apply-local-kont ι κ v σ Ξ m r)
     (match ι
       ((cons (letk x e ρ) ι)
-       (let* ((a (alloc x))
+       (let* ((a (alloc x κ))
               (ρ* (env-bind ρ x a))
               (σ* (store-alloc σ a v)))
          (ev e ρ* σ* ι κ Ξ m r)))
@@ -147,7 +150,7 @@
       ((ev `(let ((,x ,e0)) ,e1) ρ σ ι κ Ξ m r)
        (set (ev e0 ρ σ (cons (letk x e1 ρ) ι) κ Ξ m r)))
       ((ev `(letrec ((,x ,e0)) ,e1) ρ σ ι κ Ξ m r)
-       (let* ((a (alloc x))
+       (let* ((a (alloc x κ))
               (ρ* (env-bind ρ x a))
               (σ* (store-alloc σ a ⊥)))
          (set (ev e0 ρ* σ* (cons (letreck a e1 ρ*) ι) κ Ξ m r))))
@@ -156,7 +159,7 @@
          (let* ((a (env-lookup ρ x))
                 (σ* (store-update σ a v)))
            (set (ko ι κ v σ* Ξ m r)))))
-      ((ev `(,rator . ,rands) ρ σ ι κ Ξ m r)
+      ((ev (and `(,rator . ,rands) e) ρ σ ι κ Ξ m r)
        (let* ((RI (reachable (touches s) σ))
               (R (car RI))
               (I (cdr RI))
@@ -169,7 +172,7 @@
              (if (null? rands)
                  (for/fold ((states (set))) ((w (γ v)))
                    (match w
-                     ((clo (and `(lambda ,x ,e0) id) ρ**)
+                     ((clo `(lambda ,x ,e0) ρ** id)
                       (let ((cached (hash-ref m id #f)))
                         (if (and (hash? cached) (hash-has-key? cached rvs))
                             (let ((cached-v (hash-ref cached rvs)))
@@ -184,7 +187,7 @@
                                 ((cons x xs)
                                  (if (null? vs)
                                      (set)
-                                     (let ((a (alloc x)))
+                                     (let ((a (alloc x κ)))
                                        (loop xs (cdr vs) (env-bind ρ* x a) (store-alloc σ* a (car vs)))))))))))
                         ((? procedure? w)
                          (set-union states (set (ko ι κ (apply w (reverse rvs)) Γσ Ξ m r))))
@@ -215,7 +218,7 @@
       ('()
        (ev e ρ σ `(,(haltk)) #f (hash) (hash) (hash)))
       ((cons (cons x v) r)
-       (let ((a (conc-alloc x)))
+       (let ((a (conc-alloc x 0)))
          (loop r (hash-set ρ x a) (hash-set σ a v)))))))
                                       
 (define (run s step)
@@ -246,12 +249,25 @@
 ;; allocators
 (define conc-alloc
   (let ((counter 0))
-    (lambda (x)
+    (lambda (_ __)
       (set! counter (+ counter 1))
       counter)))
 
-(define (mono-alloc x)
+(define (mono-alloc x _)
   x)
+
+(define (poly-alloc x ctx)
+  (cons x (if ctx
+              (clo-λ (ctx-clo ctx))
+              ctx)))
+;;
+
+;; procedure identifiers
+(define (λ-proc λ ρ)
+  λ)
+
+(define (clo-proc λ ρ)
+  (cons λ ρ)) 
 ;;
 
 ;; conc lattice
@@ -275,7 +291,7 @@
 (define (conc-false? v)
   (not v))
 
-(define conc-step (make-step conc-α conc-γ conc-⊥ conc-⊔ conc-alloc conc-true? conc-false?))
+(define conc-step (make-step conc-α conc-γ conc-⊥ conc-⊔ conc-alloc conc-true? conc-false? clo-proc))
 
 (define conc-global
   `((= . ,(conc-α =))
@@ -313,7 +329,7 @@
 (define (type-false? v)
   #t)
 
-(define type-step (make-step type-α type-γ type-⊥ type-⊔ mono-alloc type-true? type-false?))
+(define type-step (make-step type-α type-γ type-⊥ type-⊔ poly-alloc type-true? type-false? λ-proc))
 
 (define type-global
   `((= . ,(type-α (lambda (v1 v2)

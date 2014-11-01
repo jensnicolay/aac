@@ -94,7 +94,7 @@
   (define (apply-local-kont ι κ v σ Ξ)
     (match ι
       ((cons (letk x e ρ) ι)
-       (let* ((a (alloc x))
+       (let* ((a (alloc x κ))
               (ρ* (env-bind ρ x a))
               (σ* (store-alloc σ a v)))
          (ev e ρ* σ* ι κ Ξ)))
@@ -117,7 +117,7 @@
       ((ev `(let ((,x ,e0)) ,e1) ρ σ ι κ Ξ)
        (set (ev e0 ρ σ (cons (letk x e1 ρ) ι) κ Ξ)))
       ((ev `(letrec ((,x ,e0)) ,e1) ρ σ ι κ Ξ)
-       (let* ((a (alloc x))
+       (let* ((a (alloc x κ))
               (ρ* (env-bind ρ x a))
               (σ* (store-alloc σ a ⊥)))
          (set (ev e0 ρ* σ* (cons (letreck a e1 ρ*) ι) κ Ξ))))
@@ -126,7 +126,7 @@
               (a (env-lookup ρ x))
               (σ* (store-update σ a v)))
          (set (ko ι κ v σ* Ξ))))
-      ((ev `(,rator . ,rands) ρ σ ι κ Ξ)
+      ((ev (and `(,rator . ,rands) e) ρ σ ι κ Ξ)
        (let* ((R (reachable (touches s) σ))
               (Γσ (↓ σ R)))
          (let ((v (eval-atom rator ρ Γσ)))
@@ -144,7 +144,7 @@
                           ((cons x xs)
                            (if (null? vs)
                                (set)
-                               (let ((a (alloc x)))
+                               (let ((a (alloc x κ)))
                                  (loop xs (cdr vs) (env-bind ρ* x a) (store-alloc σ* a (car vs)))))))))
                      ((? procedure? w)
                       (set-union states (set (ko ι κ (apply w (reverse rvs)) Γσ Ξ))))
@@ -174,7 +174,7 @@
       ('()
        (ev e ρ σ `(,(haltk)) #f (hash)))
       ((cons (cons x v) r)
-       (let ((a (conc-alloc x)))
+       (let ((a (conc-alloc x 0)))
          (loop r (hash-set ρ x a) (hash-set σ a v)))))))
                                       
 (define (run s step)
@@ -205,12 +205,17 @@
 ;; allocators
 (define conc-alloc
   (let ((counter 0))
-    (lambda (x)
+    (lambda (_ __)
       (set! counter (+ counter 1))
       counter)))
 
-(define (mono-alloc x)
+(define (mono-alloc x _)
   x)
+
+(define (poly-alloc x ctx)
+  (cons x (if ctx
+              (clo-λ (ctx-clo ctx))
+              ctx)))
 ;;
 
 ;; conc lattice
@@ -272,7 +277,7 @@
 (define (type-false? v)
   #t)
 
-(define type-step (make-step type-α type-γ type-⊥ type-⊔ mono-alloc type-true? type-false?))
+(define type-step (make-step type-α type-γ type-⊥ type-⊔ poly-alloc type-true? type-false?))
 
 (define type-global
   `((= . ,(type-α (lambda (v1 v2)
@@ -345,7 +350,7 @@
    (type-eval mj09)
    (conc-eval rotate)
    (type-eval rotate)
-   ) ; cpu time: 40312 real time: 40304 gc time: 195
+   )
   
   ;(conc-eval sat)
   ;(type-eval sat)
@@ -393,7 +398,7 @@
   ;)
 ) ; 
 
-(define (memo-test)
+(define (test)
   (define ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 loop2 mj09 rotate))
   
   (for ((en ens))
