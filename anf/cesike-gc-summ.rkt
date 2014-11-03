@@ -1,6 +1,6 @@
 #lang racket
 
-; memoizing, garbage-collected CESIK*Ξ machine for ANF Scheme (lambda if set! let letrec)
+; memoizing, garbage-collecting CESIK*Ξ machine for ANF Scheme (lambda if set! let letrec)
 ; summary edges
 ; gc on application evaluation
 ; guarded pop from Ξ with immediate (local) kont application (the halt state is still handled as an administractive step)
@@ -68,14 +68,13 @@
                  (if (or (not κ) (set-member? seen κ))
                      (loop (set-rest todo) result* seen)
                      (loop (set-union (set-rest todo) (stack-lookup Ξ κ)) result* (set-add seen κ))))))))))
-  (define (contexts κ Ξ)
-    (let loop ((todo (set (cons #f κ))) (seen (set)))
-      (if (set-empty? todo)
-          seen
-          (let ((κ (cdr (set-first todo))))
-            (if (or (not κ) (set-member? seen κ))
-                (loop (set-rest todo) seen)
-                (loop (set-union (set-rest todo) (stack-lookup Ξ κ)) (set-add seen κ)))))))
+  (define (stack-pop ι κ Ξ G)
+    (if (null? ι)
+        (if (or (not κ) (set-member? G κ))
+            (set)
+            (let ((ικs (stack-lookup Ξ κ)))
+              (apply set-union (set-map ικs (lambda (ικ) (stack-pop (car ικ) (cdr ικ) Ξ (set-add G κ)))))))
+        (set (list ι κ G))))
   (define (memo-cache m τ v σ)
     (let ((current (hash-ref m τ (set))))
       (hash-set m τ (set-add current (cons v σ)))))
@@ -171,23 +170,13 @@
                      (_ (set))))
                  (let ((v (eval-atom (car rands) ρ Γσ)))
                    (loop (cdr rands) (cons v rvs))))))))
-       ((ko '() κ v σ Ξ m)
-        (let ((m* (memo-cache m κ v σ)))
-          (let loop ((todo (stack-lookup Ξ κ)) (result (set)) (seen (set κ)) (m m*))
-            (if (set-empty? todo)
-                result
-                (let ((ικ (set-first todo)))
-                  (match ικ
-                    ((cons '() κ)
-                     (if (set-member? seen κ)
-                         (loop (set-rest todo) result seen m)
-                         (loop (set-union (set-rest todo) (stack-lookup Ξ κ)) result (set-add seen κ) (memo-cache m κ v σ))))
-                    ((cons ι κ) (loop (set-rest todo) (set-add result (apply-local-kont ι κ v σ Ξ m)) seen m))))))))
-      ((ko (cons (haltk) _) _ v _ _ _)
+      ((ko (cons (haltk) _) #f v _ _ _)
        (set))
       ((ko ι κ v σ Ξ m)
-       (set (apply-local-kont ι κ v σ Ξ m))))))
-
+        (let ((ικGs (stack-pop ι κ Ξ (set))))
+          (for/set ((ικG ικGs))
+            (let ((m* (for/fold ((m m)) ((τ (caddr ικG))) (memo-cache m τ v σ))))
+              (apply-local-kont (car ικG) (cadr ικG) v σ Ξ m*))))))))
 
 (define (inject e global)
   (let loop ((global global) (ρ (hash)) (σ (hash)))

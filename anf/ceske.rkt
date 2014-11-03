@@ -271,7 +271,7 @@
  (type-eval mj09)
  (conc-eval rotate)
  (type-eval rotate)
- ) ; cpu time: 362770 real time: 363058 gc time: 660
+ )
 
 ;(conc-eval sat)
 ;(type-eval sat)

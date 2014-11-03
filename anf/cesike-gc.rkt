@@ -1,6 +1,6 @@
 #lang racket
 
-; garbage-collected CESIK*Ξ machine for ANF Scheme (lambda if set! let letrec)
+; garbage-collecting CESIK*Ξ machine for ANF Scheme (lambda if set! let letrec)
 ; gc on application evaluation
 ; guarded pop from Ξ with immediate (local) kont application (the halt state is still handled as an administractive step)
 ; local Ξ
@@ -71,6 +71,13 @@
                  (if (or (not κ) (set-member? seen κ))
                      (loop (set-rest todo) result* seen)
                      (loop (set-union (set-rest todo) (stack-lookup Ξ κ)) result* (set-add seen κ))))))))))
+  (define (stack-pop ι κ Ξ G)
+    (if (null? ι)
+        (if (or (not κ) (set-member? G κ))
+            (set)
+            (let ((ικs (stack-lookup Ξ κ)))
+              (apply set-union (set-map ικs (lambda (ικ) (stack-pop (car ικ) (cdr ικ) Ξ (set-add G κ)))))))
+        (set (list ι κ))))
   (define (touches d)
     (if (set? d)
         (apply set-union (set-map d touches))
@@ -126,7 +133,7 @@
               (a (env-lookup ρ x))
               (σ* (store-update σ a v)))
          (set (ko ι κ v σ* Ξ))))
-      ((ev (and `(,rator . ,rands) e) ρ σ ι κ Ξ)
+      ((ev `(,rator . ,rands) ρ σ ι κ Ξ)
        (let* ((R (reachable (touches s) σ))
               (Γσ (↓ σ R)))
          (let ((v (eval-atom rator ρ Γσ)))
@@ -151,22 +158,12 @@
                      (_ (set))))
                  (let ((v (eval-atom (car rands) ρ Γσ)))
                    (loop (cdr rands) (cons v rvs))))))))
-       ((ko '() κ v σ Ξ)
-       (let loop ((todo (stack-lookup Ξ κ)) (result (set)) (seen (set κ)))
-         (if (set-empty? todo)
-             result
-             (let ((ικ (set-first todo)))
-               (match ικ
-                 ((cons '() κ)
-                  (if (set-member? seen κ)
-                      (loop (set-rest todo) result seen)
-                      (loop (set-union (set-rest todo) (stack-lookup Ξ κ)) result (set-add seen κ))))
-                 ((cons ι κ) (loop (set-rest todo) (set-add result (apply-local-kont ι κ v σ Ξ)) seen)))))))
-      ((ko (cons (haltk) _) _ v _ _)
+      ((ko (cons (haltk) _) #f v _ _)
        (set))
       ((ko ι κ v σ Ξ)
-       (set (apply-local-kont ι κ v σ Ξ))))))
-
+        (let ((ικs (stack-pop ι κ Ξ (set))))
+          (for/set ((ικ ικs))
+            (apply-local-kont (car ικ) (cadr ικ) v σ Ξ)))))))
 
 (define (inject e global)
   (let loop ((global global) (ρ (hash)) (σ (hash)))
