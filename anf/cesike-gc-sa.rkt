@@ -460,20 +460,25 @@
   ;; Number of kB it takes to represent a state in textual form
   (round (/ (string-length (~a state)) 1000)))
 
-(define (memo-size state)
-  ;; Number of entries in the memo table of a state
-  (let ((m (match state
-                      ((ev _ _ _ _ _ _ m _) m)
-                      ((ko _ _ _ _ _ m _) m))))
-    (foldl (lambda (k acc)
-             (+ acc
-                (let ((table (hash-ref m k (hash))))
-                  (if (hash? table)
-                      (length (hash-keys table))
-                      ;; No hash but it's still an entry
-                      1))))
-           0
-           (hash-keys m))))
+(define (memo-size-f f)
+  (lambda (state)
+    (let ((m (match state
+               ((ev _ _ _ _ _ _ m _) m)
+               ((ko _ _ _ _ _ m _) m))))
+      (foldl (lambda (table acc) (+ acc (f table)))
+             0 (hash-values m)))))
+
+;; Number of entries in the memo table of a state
+(define memo-size
+  (memo-size-f (lambda (table) (if (hash? table) (length (hash-keys table)) 0))))
+
+;; Number of poly entries in the memo table
+(define poly-count
+  (memo-size-f (lambda (table) (if (equal? table 'POLY) 1 0))))
+
+;; Number of impure entries in the memo table
+(define impure-count
+  (memo-size-f (lambda (table) (if (equal? table 'IMPURE) 1 0))))
 
 (define (reads-size state)
   ;; Number of entries in the read table
@@ -507,7 +512,8 @@
       (let* ((start (current-milliseconds))
              (sys (explore e type-global type-step))
              (duration (- (current-milliseconds) start)))
-        (printf "~a result ~a states ~a time ~a memo ~a size ~a avgsize ~a memosize ~a readsize ~a\n" en
+        (printf "~a result ~a states ~a time ~a memo ~a size ~a avgsize ~a memosize ~a readsize ~a poly ~a impure ~a\n" en
                 (answer sys type-⊥ type-⊔) (set-count (system-states sys))
                 duration memo-count
-                (answer-size sys state-size) (avg-size sys) (answer-size sys memo-size) (answer-size sys reads-size))))))
+                (answer-size sys state-size) (avg-size sys state-size) (answer-size sys memo-size)
+                (answer-size sys reads-size) (answer-size sys poly-count) (answer-size sys impure-count))))))
