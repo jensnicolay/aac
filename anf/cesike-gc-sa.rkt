@@ -488,6 +488,12 @@
   ;; Total size of the answer set for some size function
   (foldl + 0 (map f (set->list (answer-set sys)))))
 
+(define (avg-size sys f)
+  ;; Average size of a (component of a) state
+  (let ((states (answer-set sys)))
+    (round (/ (foldl + 0 (map f (set->list states)))
+              (set-count states)))))
+
 (define (memo-test)
   (define ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 loop2 mj09 rotate))
 
@@ -501,7 +507,7 @@
       (let* ((start (current-milliseconds))
              (sys (explore e type-global type-step))
              (duration (- (current-milliseconds) start)))
-        (printf "~a result ~a states ~a time ~a memo ~a size ~a memosize ~a readsize ~a\n" en
+        (printf "~a result ~a states ~a time ~a memo ~a size ~a avgsize ~a memosize ~a readsize ~a\n" en
                 (answer sys type-⊥ type-⊔) (set-count (system-states sys))
                 duration memo-count
-                (answer-size sys state-size) (answer-size sys memo-size) (answer-size sys reads-size))))))
+                (answer-size sys state-size) (avg-size sys) (answer-size sys memo-size) (answer-size sys reads-size))))))
