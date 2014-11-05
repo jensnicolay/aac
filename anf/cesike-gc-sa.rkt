@@ -50,6 +50,10 @@
 (struct env (bindings tag) #:transparent)
 (struct system (states) #:transparent)
 
+;(define (d value printfstr . args)
+;  (apply printf (cons printfstr (map (lambda (x) (if (eq? x 'THIS) value x)) args)))
+;  value)
+
 (define (make-step α γ ⊥ ⊔ alloc true? false? proc)
   (define (env-bind ρ x a)
     (hash-set ρ x a))
@@ -87,7 +91,7 @@
         (set (list ι κ G))))
   (define (memo-cache m τ v)
     (let* ((id (clo-id (ctx-clo τ)))
-           (current (hash-ref m id (hash))))
+           (current (hash-ref m id #f))) ; possible that proc already unreachable, e.g. ((lam (x) x) 123)
       (if (hash? current)
           (let ((vs (ctx-vs τ)))
             (hash-set m id (hash-set current vs (⊔ (hash-ref current vs ⊥) v))))
@@ -95,7 +99,7 @@
   (define (memo-poly m id)
     (if (hash-has-key? m id)
         (hash-set m id 'POLY)
-        m))
+        (hash-set m id (hash))))
   (define (update-r r a ctxs)
     (let ((ids (list->set (set-map (force ctxs) (lambda (ctx) (clo-id (ctx-clo ctx)))))))
       (hash-set r a (set-union (hash-ref r a (set)) ids))))
@@ -305,7 +309,8 @@
     (+ . ,(conc-α +))
     (- . ,(conc-α -))
     (* . ,(conc-α *))
-    (not . ,(conc-α not))))
+    (not . ,(conc-α not))
+    (cons . ,(conc-α cons))))
 
 (define (conc-eval e)
   (do-eval e conc-global conc-step conc-⊥ conc-⊔))
@@ -350,7 +355,8 @@
     (* . ,(type-α (lambda (v1 v2)
                     (set 'NUM))))
     (not . ,(type-α (lambda (v)
-                      (set 'BOOL))))))
+                      (set 'BOOL))))
+    (cons . ,(type-α (lambda (v1 v2) (set (cons v1 v2)))))))
 
 (define (type-eval e)
   (do-eval e type-global type-step type-⊥ type-⊔))
@@ -373,6 +379,7 @@
 (define rotate '(letrec ((_rotate0 (lambda (_n1 _x2 _y3 _z4) (let ((_p5 (= _n1 0))) (if _p5 _x2 (let ((_p6 (- _n1 1))) (_rotate0 _p6 _y3 _z4 _x2))))))) (_rotate0 41 5 #t "hallo")))
 (define sat '(let ((_phi5 (lambda (_x16 _x27 _x38 _x49) (let ((__t010 _x16)) (let ((_p23 (if __t010 __t010 (let ((__t111 (not _x27))) (if __t111 __t111 (not _x38)))))) (if _p23 (let ((__t212 (not _x27))) (let ((_p24 (if __t212 __t212 (not _x38)))) (if _p24 (let ((__t313 _x49)) (if __t313 __t313 _x27)) #f))) #f)))))) (let ((_try14 (lambda (_f15) (let ((__t416 (_f15 #t))) (if __t416 __t416 (_f15 #f)))))) (let ((_sat-solve-417 (lambda (_p18) (_try14 (lambda (_n119) (_try14 (lambda (_n220) (_try14 (lambda (_n321) (_try14 (lambda (_n422) (_p18 _n119 _n220 _n321 _n422)))))))))))) (_sat-solve-417 _phi5)))))
 (define hellomemo '(let ((f (lambda (x) x))) (let ((u (f 1))) (f 2))))
+(define hellopoly '(let ((f (lambda (x) (lambda (y) x)))) (let ((g (f 3))) (let ((h (f #f))) (let ((gg (g 7))) (let ((hh (h 41))) (cons gg hh)))))))
 
 (define (time-test)
   (conc-eval sq)
@@ -407,7 +414,7 @@
    (type-eval mj09)
    (conc-eval rotate)
    (type-eval rotate)
-   ) ; cpu time: 40312 real time: 40304 gc time: 195
+   )
 
   ;(conc-eval sat)
   ;(type-eval sat)
@@ -499,8 +506,9 @@
     (round (/ (foldl + 0 (map f (set->list states)))
               (set-count states)))))
 
-(define (memo-test)
-  (define ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 loop2 mj09 rotate))
+(define (memo-test . ens)
+  (when (null? ens)
+      (set! ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 loop2 mj09 rotate)))
 
   (for ((en ens))
     (let* ((e (eval en))
