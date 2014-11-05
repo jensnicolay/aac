@@ -144,7 +144,7 @@
                      ((clo `(lambda ,x ,e0) ρ**)
                       (let loop ((x x) (vs (reverse rvs)) (ρ* ρ**) (σ* Γσ))
                         (match x
-                          ('() 
+                          ('()
                            (let* ((τ (ctx w rvs Γσ))
                                   (Ξ* (stack-alloc Ξ τ (cons ι κ))))
                              (set-union states (set (ev e0 ρ* σ* '() τ Ξ*)))))
@@ -173,7 +173,7 @@
       ((cons (cons x v) r)
        (let ((a (conc-alloc x 0)))
          (loop r (hash-set ρ x a) (hash-set σ a v)))))))
-                                      
+
 (define (run s step)
   (let loop ((visited (set))
              (todo (set s)))
@@ -192,8 +192,16 @@
     ((ko (cons (haltk) _) _ v _ _) #t)
     (_ #f)))
 
+(define (answer-set sys)
+  (for/fold ((v (set)))
+      ((s (system-states sys)))
+    (if (answer-state? s)
+        (set-add v s)
+        v)))
+
 (define (answer sys ⊥ ⊔)
-  (for/fold ((v ⊥)) ((s (system-states sys))) (⊔ (if (answer-state? s) (ko-v s) ⊥) v)))
+  (for/fold ((v ⊥)) ((s (answer-set sys)))
+    (⊔ (ko-v s) v)))
 
 (define (do-eval e global step ⊥ ⊔)
   (answer (explore e global step) ⊥ ⊔))
@@ -317,13 +325,13 @@
 (define (time-test)
   (conc-eval sq)
   (type-eval sq)
-  
+
   (conc-eval hellomemo)
   (type-eval hellomemo)
-  
+
   (type-eval loopy1)
   (type-eval loopy2)
-  
+
   (time
    (conc-eval safeloopy1)
    (type-eval safeloopy1)
@@ -348,7 +356,7 @@
    (conc-eval rotate)
    (type-eval rotate)
    )
-  
+
   ;(conc-eval sat)
   ;(type-eval sat)
 
@@ -359,7 +367,7 @@
 (define (conc-time-test)
   (conc-eval sq)
   (conc-eval hellomemo)
-  
+
   (time
    (conc-eval safeloopy1)
    (conc-eval blur)
@@ -379,7 +387,7 @@
 
   (type-eval loopy1)
   (type-eval loopy2)
-  
+
   ;(time
    (type-eval safeloopy1)
    (type-eval blur)
@@ -393,11 +401,21 @@
    (type-eval mj09)
    (type-eval rotate)
   ;)
-) ; 
+) ;
+
+;; Some metrics
+(define (state-size state)
+  ;; Number of characters it takes to represent a state
+  (round (/ (string-length (~a state)) 1000)))
+
+(define (answer-size sys)
+  ;; Total size of the answer set
+  (foldl + 0 (map state-size (set->list (answer-set sys)))))
 
 (define (test)
-  (define ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 loop2 mj09 rotate))
-  
+  (define ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 mj09 rotate))
+  ; (define ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 loop2 mj09 rotate))
+
   (for ((en ens))
     (let* ((e (eval en))
            (memo-count 0)
@@ -408,4 +426,4 @@
       (let* ((start (current-milliseconds))
              (sys (explore e type-global type-step))
              (duration (- (current-milliseconds) start)))
-        (printf "~a result ~a states ~a time ~a\n" en (answer sys type-⊥ type-⊔) (set-count (system-states sys)) duration)))))
+        (printf "~a result ~a states ~a time ~a size ~a\n" en (answer sys type-⊥ type-⊔) (set-count (system-states sys)) duration (answer-size sys))))))

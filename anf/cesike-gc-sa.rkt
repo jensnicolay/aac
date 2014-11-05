@@ -84,7 +84,7 @@
             (set)
             (let ((ικs (stack-lookup Ξ κ)))
               (apply set-union (set-map ικs (lambda (ικ) (stack-pop (car ικ) (cdr ικ) Ξ (set-add G κ)))))))
-        (set (list ι κ G))))  
+        (set (list ι κ G))))
   (define (memo-cache m τ v)
     (let* ((id (clo-id (ctx-clo τ)))
            (current (hash-ref m id (hash))))
@@ -186,7 +186,7 @@
                               (set-union states (set (ko ι κ cached-v Γσ Ξ m r))))
                             (let loop ((x x) (vs (reverse rvs)) (ρ* ρ**) (σ* Γσ))
                               (match x
-                                ('() 
+                                ('()
                                  (let* ((τ (ctx w rvs Γσ))
                                         (Ξ* (stack-alloc Ξ τ (cons ι κ))))
                                    (set-union states (set (ev e0 ρ* σ* '() τ Ξ* m r)))))
@@ -217,7 +217,7 @@
       ((cons (cons x v) r)
        (let ((a (conc-alloc x 0)))
          (loop r (hash-set ρ x a) (hash-set σ a v)))))))
-                                      
+
 (define (run s step)
   (let loop ((visited (set))
              (todo (set s)))
@@ -236,8 +236,16 @@
     ((ko (cons (haltk) _) _ v _ _ _ _) #t)
     (_ #f)))
 
+(define (answer-set sys)
+  (for/fold ((v (set)))
+      ((s (system-states sys)))
+    (if (answer-state? s)
+        (set-add v s)
+        v)))
+
 (define (answer sys ⊥ ⊔)
-  (for/fold ((v ⊥)) ((s (system-states sys))) (⊔ (if (answer-state? s) (ko-v s) ⊥) v)))
+  (for/fold ((v ⊥)) ((s (answer-set sys)))
+    (⊔ (ko-v s) v)))
 
 (define (do-eval e global step ⊥ ⊔)
   (answer (explore e global step) ⊥ ⊔))
@@ -264,7 +272,7 @@
   λ)
 
 (define (clo-proc λ ρ)
-  (cons λ ρ)) 
+  (cons λ ρ))
 ;;
 
 ;; conc lattice
@@ -369,13 +377,13 @@
 (define (time-test)
   (conc-eval sq)
   (type-eval sq)
-  
+
   (conc-eval hellomemo)
   (type-eval hellomemo)
-  
+
   (type-eval loopy1)
   (type-eval loopy2)
-  
+
   (time
    (conc-eval safeloopy1)
    (type-eval safeloopy1)
@@ -400,7 +408,7 @@
    (conc-eval rotate)
    (type-eval rotate)
    ) ; cpu time: 40312 real time: 40304 gc time: 195
-  
+
   ;(conc-eval sat)
   ;(type-eval sat)
 
@@ -411,7 +419,7 @@
 (define (conc-time-test)
   (conc-eval sq)
   (conc-eval hellomemo)
-  
+
   (time
    (conc-eval safeloopy1)
    (conc-eval blur)
@@ -431,7 +439,7 @@
 
   (type-eval loopy1)
   (type-eval loopy2)
-  
+
   ;(time
    (type-eval safeloopy1)
    (type-eval blur)
@@ -447,9 +455,42 @@
   ;)
 )
 
+;; Some metrics
+(define (state-size state)
+  ;; Number of kB it takes to represent a state in textual form
+  (round (/ (string-length (~a state)) 1000)))
+
+(define (memo-size state)
+  ;; Number of entries in the memo table of a state
+  (let ((m (match state
+                      ((ev _ _ _ _ _ _ m _) m)
+                      ((ko _ _ _ _ _ m _) m))))
+    (foldl (lambda (k acc)
+             (+ acc
+                (let ((table (hash-ref m k (hash))))
+                  (if (hash? table)
+                      (length (hash-keys table))
+                      ;; No hash but it's still an entry
+                      1))))
+           0
+           (hash-keys m))))
+
+(define (reads-size state)
+  ;; Number of entries in the read table
+  (let ((r (match state
+             ((ev _ _ _ _ _ _ _ r) r)
+             ((ko _ _ _ _ _ _ r) r))))
+    (foldl (lambda (v acc) (+ acc (set-count v)))
+           0
+           (hash-values r))))
+
+(define (answer-size sys f)
+  ;; Total size of the answer set for some size function
+  (foldl + 0 (map f (set->list (answer-set sys)))))
+
 (define (memo-test)
   (define ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 loop2 mj09 rotate))
-  
+
   (for ((en ens))
     (let* ((e (eval en))
            (memo-count 0)
@@ -460,4 +501,7 @@
       (let* ((start (current-milliseconds))
              (sys (explore e type-global type-step))
              (duration (- (current-milliseconds) start)))
-        (printf "~a result ~a states ~a time ~a memo ~a\n" en (answer sys type-⊥ type-⊔) (set-count (system-states sys)) duration memo-count)))))
+        (printf "~a result ~a states ~a time ~a memo ~a size ~a memosize ~a readsize ~a\n" en
+                (answer sys type-⊥ type-⊔) (set-count (system-states sys))
+                duration memo-count
+                (answer-size sys state-size) (answer-size sys memo-size) (answer-size sys reads-size))))))
