@@ -31,6 +31,14 @@
     (* . ,(conc-α (prim2 '* *)))
     (/ . ,(conc-α (prim2 '/ /)))
     (not . ,(conc-α (prim2 'not not)))
+    (and . ,(conc-α (prim2 'and (lambda l
+                                  (for/fold ((res #t))
+                                      ((el l))
+                                    (and res el))))))
+    (or . ,(conc-α (prim2 'or (lambda l
+                                (for/fold ((res #f))
+                                    ((el l))
+                                  (or res el))))))
     (gcd . ,(conc-α (prim2 'gcd gcd)))
     (modulo . ,(conc-α (prim2 'modulo modulo)))
     (remainder . ,(conc-α (prim2 'remainder remainder)))
@@ -122,6 +130,8 @@
       (* . ,(type-α (prim2 '* num->num->num)))
       (/ . ,(type-α (prim2 '/ num->num->num)))
       (not . ,(type-α (prim2 'not any->bool)))
+      (and . ,(type-α (prim2 'and any->bool)))
+      (or . ,(type-α (prim2 'or any->bool)))
       (gcd . ,(type-α (prim2 'gcd num->num->num)))
       (modulo . ,(type-α (prim2 'modulo num->num->num)))
       (remainder . ,(type-α (prim2 'remainder num->num->num)))

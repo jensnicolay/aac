@@ -25,3 +25,6 @@
 (define primtest (file->value "test/primtest.scm"))
 (define regex (file->value "test/regex.scm"))
 (define churchNums (file->value "test/churchNums.scm"))
+(define nqueens (file->value "test/nqueens.scm"))
+(define fib-mut (file->value "test/fib-mut.scm"))
+(define account (file->value "test/account.scm"))
