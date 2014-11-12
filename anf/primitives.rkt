@@ -6,7 +6,6 @@
               (cons (α (addr a)) (store-alloc cdr-σ a (α (cons car-v cdr-v)))))))
         (cons (α e) σ)))
   (define (prim-cons e rands σ ι κ Ξ)
-    (displayln (list e rands))
     (if (= (length rands) 2)
         (let* ((a (alloc '!%cons e))
                (v (α (cons (car rands) (cadr rands))))
