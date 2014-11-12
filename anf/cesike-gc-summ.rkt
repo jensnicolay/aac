@@ -6,18 +6,11 @@
 ; guarded pop from Ξ with immediate (local) kont application (the halt state is still handled as an administractive step)
 ; local Ξ
 
-(define LOG (lambda (msg) #f))
+(random-seed 111) ; deterministic random
+(define MEMO (lambda (msg) #f))
+(define DEBUG '())
 
-;; general helpers
-(define (↓ m s)
-  (let loop ((s s) (r (hash)))
-    (if (set-empty? s)
-        r
-        (let ((key (set-first s)))
-          (if (hash-has-key? m key)
-              (loop (set-rest s) (hash-set r key (hash-ref m key)))
-              (loop (set-rest s) r))))))
-;;
+(include "../general.rkt")
 
 ;; domain helpers
 (define (env-lookup ρ x)
@@ -35,8 +28,25 @@
     ((? boolean? e) #t)
     ((? number? e) #t)
     ((? string? e) #t)
+    (`(quote ,e) (not (pair? e)))
     (_ #f)))
+(define (free e)
+  (define (f e env)
+    (match e
+      ((? symbol? e) (if (set-member? env e)
+                         (set)
+                         (set e)))
+      (`(lambda ,x ,e) (f e (set-union env (list->set x))))
+      (`(let ((,x ,e0)) ,e1) (set-union (f e0 env) (f e1 (set-add env x))))
+      (`(letrec ((,x ,e0)) ,e1) (set-union (f e0 (set-add env x)) (f e1 (set-add env x))))
+      (`(if ,ae ,e1 ,e2) (set-union (f ae env) (f e1 env) (f e2 env)))
+      (`(set! ,x ,ae) (set-union (f x env) (f ae env) ))
+      (`(quote ,_) (set))
+      (`(,rator . ,rands) (set-union (f rator env) (for/fold ((xs (set))) ((rand rands)) (set-union xs (f rand env)))))
+      (_ (set))))
+  (f e (set)))
 ;;
+
 
 ;; machine
 (struct ev (e ρ σ ι κ Ξ m) #:transparent)
