@@ -24,6 +24,7 @@
 (define factor (file->value "test/factor.scm"))
 (define primtest (file->value "test/primtest.scm"))
 (define regex (file->value "test/regex.scm"))
+(define cpstak (file->value "test/cpstak.scm"))
 (define churchNums (file->value "test/churchNums.scm"))
 (define nqueens (file->value "test/nqueens.scm"))
 (define fib-mut (file->value "test/fib-mut.scm"))
