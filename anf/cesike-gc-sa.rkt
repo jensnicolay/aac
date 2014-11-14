@@ -68,7 +68,7 @@
 (struct vmr (v m r) #:transparent)
 (struct system (mach states) #:transparent)
 
-(define (make-machine global α γ ⊥ ⊔ alloc true? false? α-eq?)
+(define (make-machine global α γ ⊥ ⊔ alloc true? false? α-eq? memo?)
   (define (env-bind ρ x a)
     (hash-set ρ x a))
   (define (store-alloc σ a v)
@@ -86,17 +86,17 @@
     (if (hash-has-key? m id)
         (hash-set m id 'POLY)
         (hash-set m id (hash))))
-  (define (update-r r a ctxs)
-    (let ((ids (list->set (set-map (force ctxs) (lambda (ctx) (clo-id (ctx-clo ctx)))))))
-      (hash-set r a (set-union (hash-ref r a (set)) ids))))
+  ;(define (update-r r a ctxs)
+   ; (let ((ids (list->set (set-map (force ctxs) (lambda (ctx) (clo-id (ctx-clo ctx)))))))
+    ;  (hash-set r a (set-union (hash-ref r a (set)) ids))))
   (define (eval-atom ae ρ σ ctxs m r)
     (match ae
       ((? symbol? ae)
        (let ((a (env-lookup ρ ae)))
-         (vmr (store-lookup σ a) m (update-r r a ctxs))))
+         (vmr (store-lookup σ a) m r)));(update-r r a ctxs))))
       (`(lambda ,x ,e0)
        (let ((id (λ-proc ae ρ)))
-         (vmr (α (clo ae ρ id)) (memo-poly m ae) r)))
+         (vmr (α (clo ae ρ id)) (if memo? (memo-poly m ae) m) r)))
       (`(quote ,atom) (vmr (α atom) m r))
       (_ (vmr (α ae) m r))))
   (include "primitives.rkt")
@@ -220,22 +220,25 @@
                      (for/fold ((states (set))) ((w (γ v)))
                        (match w
                          ((clo `(lambda ,x ,e0) ρ** id)
-                          (let ((cached (hash-ref m id #f)))
-                            (if (and (hash? cached) (hash-has-key? cached rvs))
-                                (let ((cached-v (hash-ref cached rvs)))
-                                  (MEMO "MEMO")
-                                  (set-union states (set (ko ι κ cached-v Γσ Ξi m r))))
-                                (let rator-loop ((x x) (vs (reverse rvs)) (ρ* ρ**) (σ* Γσ))
-                                  (match x
-                                    ('()
-                                     (let ((τ (ctx w rvs Γσ)))
-                                       (stack-alloc! τ (cons ι κ))
-                                       (set-union states (set (ev e0 ρ* σ* '() τ Ξi m r)))))
-                                    ((cons x xs)
-                                     (if (null? vs)
-                                         (set)
-                                         (let ((a (alloc x e)))
-                                           (rator-loop xs (cdr vs) (env-bind ρ* x a) (store-alloc σ* a (car vs)))))))))))
+                          (define (rator-loop x vs ρ* σ*)
+                            (match x
+                              ('()
+                               (let ((τ (ctx w rvs Γσ)))
+                                 (stack-alloc! τ (cons ι κ))
+                                 (set-union states (set (ev e0 ρ* σ* '() τ Ξi m r)))))
+                              ((cons x xs)
+                               (if (null? vs)
+                                   (set)
+                                   (let ((a (alloc x e)))
+                                     (rator-loop xs (cdr vs) (env-bind ρ* x a) (store-alloc σ* a (car vs))))))))
+                          (if memo?
+                              (let ((cached (hash-ref m id #f)))
+                                (if (and (hash? cached) (hash-has-key? cached rvs))
+                                    (let ((cached-v (hash-ref cached rvs)))
+                                      (MEMO "MEMO")
+                                      (set-union states (set (ko ι κ cached-v Γσ Ξi m r))))
+                                    (rator-loop x (reverse rvs) ρ** Γσ)))
+                              (rator-loop x (reverse rvs) ρ** Γσ)))
                          ((prim _ proc)
                           (set-union states (list->set (set-map (proc e (reverse rvs) Γσ ι κ Ξi) (lambda (vσ) (ko ι κ (car vσ) (cdr vσ) Ξi m r))))))
                          ((prim2 _ proc)
@@ -248,7 +251,9 @@
         ((ko ι κ v σ _ m r)
          (let ((ικGs (stack-pop ι κ (set))))
            (for/set ((ικG ικGs))
-             (let ((m* (for/fold ((m m)) ((τ (caddr ικG))) (memo-cache m τ v))))
+             (let ((m* (if memo?
+                           (for/fold ((m m)) ((τ (caddr ικG))) (memo-cache m τ v))
+                           m)))
                (apply-local-kont (car ικG) (cadr ικG) v σ m* r))))))))
   (define (inject e)
     (let ((global* (append global
@@ -311,9 +316,6 @@
          (⊔ (machine-⊔ mach)))
     (for/fold ((v ⊥)) ((s (answer-set sys)))
       (⊔ (ko-v s) v))))
-
-(define (do-eval e mach)
-  (answer-value (explore e mach)))
 ;;
 
 ;; allocators
@@ -379,11 +381,29 @@
   (let ((states (answer-set sys)))
     (round (/ (foldl + 0 (map f (set->list states)))
               (set-count states)))))
+  
+;; machines and evaluators
+(define (do-eval e mach)
+  (answer-value (explore e mach)))  
+  
+(define type-machine (make-machine type-global type-α type-γ type-⊥ type-⊔ poly-alloc type-true? type-false? type-eq? #t))
+  
+(define (type-eval e)
+  (do-eval e type-machine))  
+
+(define conc-machine (make-machine conc-global conc-α conc-γ conc-⊥ conc-⊔ conc-alloc conc-true? conc-false? conc-eq? #t))
+
+(define (conc-eval e)
+  (do-eval e conc-machine))
+;;
 
 (define (memo-test . ens)
   (when (null? ens)
     (set! ens '(hellomemo blur fac fib eta gcipd kcfa2 kcfa3 loop2 mj09 rotate)))
-  (define mach type-machine)
+  (define mach-0 (make-machine type-global type-α type-γ type-⊥ type-⊔ mono-alloc type-true? type-false? type-eq? #f))
+  (define mach-0-m (make-machine type-global type-α type-γ type-⊥ type-⊔ mono-alloc type-true? type-false? type-eq? #t))
+  (define mach-1 (make-machine type-global type-α type-γ type-⊥ type-⊔ poly-alloc type-true? type-false? type-eq? #f))
+  (define mach-1-m (make-machine type-global type-α type-γ type-⊥ type-⊔ poly-alloc type-true? type-false? type-eq? #t))
   (for ((en ens))
     (let* ((e (eval en))
            (memo-count 0)
@@ -392,10 +412,7 @@
               (set! memo-count (add1 memo-count)))))
       (set! MEMO memo-counter)
       (let* ((start (current-milliseconds))
-             (sys (explore e mach))
+             (sys (explore e mach-1-m))
              (duration (- (current-milliseconds) start)))
-        (printf "~a result ~a states ~a time ~a memo ~a size ~a avgsize ~a memosize ~a readsize ~a poly ~a impure ~a\n" en
-                (answer-value sys) (set-count (system-states sys))
-                duration memo-count
-                (answer-size sys state-size) (avg-size sys state-size) (answer-size sys memo-size)
-                (answer-size sys reads-size) (answer-size sys poly-count) (answer-size sys impure-count))))))
+        (printf "~a states ~a time ~a memo ~a result ~a\n"
+                (~a en #:min-width 10) (~a (set-count (system-states sys)) #:min-width 8) (~a duration #:min-width 8) (~a memo-count #:min-width 4) (answer-value sys))))))

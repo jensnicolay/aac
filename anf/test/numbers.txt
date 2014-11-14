@@ -1,0 +1,45 @@
+GC
+hellomemo result #<set: NUM> states 12 time 8 size 0 avgsize 0
+blur result #<set: BOOL> states 307 time 113 size 0 avgsize 0
+fac result #<set: NUM> states 64 time 6 size 0 avgsize 0
+fib result #<set: NUM> states 921 time 287 size 0 avgsize 0
+eta result #<set: BOOL> states 30 time 3 size 0 avgsize 0
+gcipd result #<set: NUM> states 234 time 55 size 0 avgsize 0
+kcfa2 result #<set: BOOL> states 103 time 12 size 2 avgsize 1
+kcfa3 result #<set: BOOL> states 275 time 44 size 11 avgsize 1
+loop2 result #<set: NUM> states 433 time 209 size 8 avgsize 1
+mj09 result #<set: NUM> states 51 time 4 size 0 avgsize 0
+rotate result #<set: NUM BOOL STR> states 70 time 17 size 6 avgsize 1
+rsa result #<set: BOOL> states 5047 time 7741 size 60 avgsize 6
+primtest result #<set: NUM> states 19634 time 26244 size 632 avgsize 4
+factor result #<set: () #(struct:addr (!%cons cons 2 _two-list5)) #(struct:addr ($%rev reverse _p19))> states 4195 time 5000 size 61 avgsize 1
+
+SUMM
+hellomemo result #<set: NUM> states 9 time 1 memo 1 size 0 avgsize 0 memosize 1
+blur result #<set: BOOL> states 147 time 141 memo 14 size 115 avgsize 23 memosize 44
+fac result #<set: NUM> states 71 time 12 memo 0 size 12 avgsize 2 memosize 13
+fib result #<set: NUM> states 1294 time 643 memo 109 size 335 avgsize 8 memosize 302
+eta result #<set: BOOL> states 30 time 3 memo 0 size 5 avgsize 5 memosize 6
+gcipd result #<set: NUM> states 417 time 327 memo 0 size 314 avgsize 17 memosize 125
+kcfa2 result #<set: BOOL> states 28 time 4 memo 2 size 7 avgsize 7 memosize 5
+kcfa3 result #<set: BOOL> states 27 time 4 memo 3 size 9 avgsize 9 memosize 4
+loop2 result #<set: NUM> states 1013 time 878 memo 26 size 1453 avgsize 17 memosize 666
+mj09 result #<set: NUM> states 80 time 26 memo 0 size 36 avgsize 9 memosize 32
+rotate result #<set: NUM BOOL STR> states 68 time 15 memo 0 size 21 avgsize 4 memosize 15
+
+
+SA
+hellomemo result #<set: NUM> states 9 time 57 memo 1 size 0 avgsize 0 memosize 1 readsize 0 poly 0 impure 0
+blur result #<set: BOOL> states 136 time 97 memo 20 size 5 avgsize 1 memosize 1 readsize 11 poly 0 impure 0
+fac result #<set: NUM> states 64 time 25 memo 0 size 1 avgsize 0 memosize 1 readsize 9 poly 0 impure 0
+fib result #<set: NUM> states 96 time 32 memo 6 size 3 avgsize 1 memosize 1 readsize 9 poly 0 impure 0
+eta result #<set: BOOL> states 29 time 3 memo 1 size 1 avgsize 1 memosize 4 readsize 2 poly 0 impure 0
+gcipd result #<set: NUM> states 249 time 145 memo 0 size 0 avgsize 0 memosize 0 readsize 2 poly 0 impure 0
+kcfa2 result #<set: BOOL> states 23 time 4 memo 3 size 1 avgsize 1 memosize 1 readsize 0 poly 0 impure 0
+kcfa3 result #<set: BOOL> states 27 time 7 memo 3 size 1 avgsize 1 memosize 1 readsize 0 poly 0 impure 0
+loop2 result #<set: NUM> states 413 time 570 memo 12 size 32 avgsize 5 memosize 7 readsize 91 poly 0 impure 0
+mj09 result #<set: NUM> states 29 time 5 memo 1 size 1 avgsize 1 memosize 1 readsize 0 poly 0 impure 0
+rotate result #<set: NUM BOOL STR> states 70 time 23 memo 0 size 11 avgsize 2 memosize 20 readsize 42 poly 0 impure 0
+rsa result #<set: BOOL> states 3430 time 6875 memo 155 size 137 avgsize 10 memosize 121 readsize 0 poly 0 impure 0
+primtest result #<set: NUM> states 9048 time 15665 memo 369 size 1104 avgsize 8 memosize 577 readsize 0 poly 0 impure 0
+factor result #<set: () #(struct:addr (!%cons cons 2 _two-list5)) #(struct:addr ($%rev reverse _p19))> states 4440 time 8571 memo 0 size 65 avgsize 1 memosize 0 readsize 0 poly 0 impure 0

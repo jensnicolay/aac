@@ -53,12 +53,7 @@
     (random . ,(conc-α (prim2 'random (lambda (v) (if (zero? v) 0 (random v))))))))
 
 (define (conc-eq? v1 v2)
-  (eq? v1 v2))
-    
-(define conc-machine (make-machine conc-global conc-α conc-γ conc-⊥ conc-⊔ conc-alloc conc-true? conc-false? conc-eq?))
-
-(define (conc-eval e)
-  (do-eval e conc-machine))
+  (eq? v1 v2))    
 ;;
 
 ;; type lattice
@@ -147,9 +142,4 @@
   
 (define (type-eq? v1 v2)
   (set 'BOOL))
-  
-(define type-machine (make-machine type-global type-α type-γ type-⊥ type-⊔ poly-alloc type-true? type-false? type-eq?))
-  
-(define (type-eval e)
-  (do-eval e type-machine))  
 ;;
